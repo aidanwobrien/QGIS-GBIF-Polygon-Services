@@ -25,6 +25,8 @@ from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QDialog
 from qgis.core import QgsGeometry
+from qgis.utils import iface
+from qgis.core import Qgis
 
 # Initialize Qt resources from file resources.py
 from .resources import *
@@ -209,6 +211,7 @@ class GBIFServices:
         # Now prompt user to select a polygon layer
         layer_dialog = LayerDialog()
         if layer_dialog.exec_() != QDialog.Accepted:
+            iface.messageBar().pushMessage("Error", "No layer selected!", level=Qgis.Critical)
             return  # user cancelled selection
 
         selected_layer, layer_name = layer_dialog.get_selected_layer()
