@@ -23,14 +23,22 @@
 """
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtWidgets import QAction, QDialog
+from qgis.core import QgsGeometry
 
 # Initialize Qt resources from file resources.py
 from .resources import *
 # Import the code for the dialog
 from .gbif_services_dialog import GBIFServicesDialog
 import os.path
-
+from .gbif_worker import (
+    create_unique_gbif_group,
+    fetch_gbif_data,
+    create_gbif_layer,
+    clipping,
+    WarningDialog,
+    LayerDialog
+)
 
 class GBIFServices:
     """QGIS Plugin Implementation."""
@@ -183,18 +191,46 @@ class GBIFServices:
     def run(self):
         """Run method that performs all the real work"""
 
-        # Create the dialog with elements (after translation) and keep reference
-        # Only create GUI ONCE in callback, so that it will only load when the plugin is started
-        if self.first_start == True:
+        if self.first_start:
             self.first_start = False
-            self.dlg = GBIFServicesDialog()
+            # Optional: Initialize a dialog for plugin settings
+            # self.dlg = GBIFServicesDialog()
 
-        # show the dialog
-        self.dlg.show()
-        # Run the dialog event loop
-        result = self.dlg.exec_()
-        # See if OK was pressed
-        if result:
-            # Do something useful here - delete the line containing pass and
-            # substitute with your code.
-            pass
+        # Show warning dialog first
+        warn_str = (
+            "Please note large queries will take longer and may crash QGIS.\n"
+            "A maximum of 100,000 records can be retrieved at one time."
+        )
+        warn_dialog = WarningDialog(warn_str)
+
+        if warn_dialog.exec_() != QDialog.Accepted:
+            return  # user clicked Cancel
+
+        # Now prompt user to select a polygon layer
+        layer_dialog = LayerDialog()
+        if layer_dialog.exec_() != QDialog.Accepted:
+            return  # user cancelled selection
+
+        selected_layer, layer_name = layer_dialog.get_selected_layer()
+        if not selected_layer:
+            return
+
+        pyqgis_group = create_unique_gbif_group()
+
+        for feature in selected_layer.getFeatures():
+            layer_id = feature.id()
+            geometry = feature.geometry()
+
+            if geometry.isMultipart():
+                for polygon in geometry.asMultiPolygon():
+                    geom = QgsGeometry.fromPolygonXY(polygon)
+                    result_layer, total_records = create_gbif_layer(geom, layer_id)
+                    if total_records > 0:
+                        clipping(result_layer, selected_layer, layer_id, pyqgis_group)
+            else:
+                result_layer, total_records = create_gbif_layer(geometry, layer_id)
+                if total_records > 0:
+                    clipping(result_layer, selected_layer, layer_id, pyqgis_group)
+
+        print("GBIF query complete.")
+
