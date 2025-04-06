@@ -27,6 +27,8 @@ from qgis.PyQt.QtWidgets import QAction, QDialog
 from qgis.core import QgsGeometry
 from qgis.utils import iface
 from qgis.core import Qgis
+from qgis.core import Qgis, QgsMessageLog
+
 
 # Initialize Qt resources from file resources.py
 from .resources import *
@@ -206,11 +208,14 @@ class GBIFServices:
         warn_dialog = WarningDialog(warn_str)
 
         if warn_dialog.exec_() != QDialog.Accepted:
-            return  # user clicked Cancel
+            print("User cancelled GBIF services script")
+            QgsMessageLog.logMessage("User cancelled GBIF Services script", "GBIF-Services", level=Qgis.Info)
+            return
 
         # Now prompt user to select a polygon layer
         layer_dialog = LayerDialog()
         if layer_dialog.exec_() != QDialog.Accepted:
+            print("No layer selected!")
             iface.messageBar().pushMessage("Error", "No layer selected!", level=Qgis.Critical)
             return  # user cancelled selection
 
@@ -234,6 +239,7 @@ class GBIFServices:
                 result_layer, total_records = create_gbif_layer(geometry, layer_id)
                 if total_records > 0:
                     clipping(result_layer, selected_layer, layer_id, pyqgis_group)
-
-        print("GBIF query complete.")
+        
+        print("GBIF Query Complete")
+        QgsMessageLog.logMessage("GBIF Query Complete", "GBIF-Services", level=Qgis.Info)
 

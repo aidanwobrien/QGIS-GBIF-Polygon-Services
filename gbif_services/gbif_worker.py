@@ -15,7 +15,7 @@ from qgis.PyQt.QtCore import QVariant
 from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QLabel, QDialogButtonBox, QFormLayout
 from qgis.gui import QgsMapLayerComboBox
 from qgis.core import QgsMapLayerProxyModel
-
+from qgis.core import QgsMapLayerProxyModel, Qgis, QgsMessageLog
 
 # ---------- Group Management ----------
 def create_unique_gbif_group():
@@ -113,6 +113,9 @@ def clipping(input_layer, overlay_layer, layer_id, pyqgis_group):
     layer_clip_result = QgsProject.instance().addMapLayer(layer_clip, False)
 
     feature_count = len([f for f in layer_clip.getFeatures()])
+    QgsMessageLog.logMessage(f"{feature_count} GBIF occurrences within polygon layer {layer_id} have been added to the map.", 
+                            "GBIF-Services", 
+                            level=Qgis.Info)
     print(f"{feature_count} GBIF occurrences within polygon layer {layer_id} have been added to the map.")
 
     return pyqgis_group.addLayer(layer_clip_result)
@@ -159,6 +162,7 @@ class LayerDialog(QDialog):
         if self.map_layer_combo_box.currentLayer():
             self.accept()
         else:
+            QgsMessageLog.logMessage("No layer selected!", "GBIF-Services", level=Qgis.Info)
             print("No layer selected!")
             self.reject()
 
