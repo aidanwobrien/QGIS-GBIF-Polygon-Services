@@ -21,13 +21,12 @@
  *                                                                         *
  ***************************************************************************/
 """
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QDialog
-from qgis.core import QgsGeometry
 from qgis.utils import iface
-from qgis.core import Qgis
-from qgis.core import Qgis, QgsMessageLog
+from qgis.core import Qgis, QgsMessageLog, QgsProject, QgsGeometry
+
 
 
 # Initialize Qt resources from file resources.py
@@ -37,6 +36,8 @@ from .gbif_services_dialog import GBIFServicesDialog
 import os.path
 from .gbif_worker import (
     create_unique_gbif_group,
+    create_progress_dialog,
+    create_clipping_progress_dialog,
     fetch_gbif_data,
     create_gbif_layer,
     clipping,
@@ -216,7 +217,7 @@ class GBIFServices:
         layer_dialog = LayerDialog()
         if layer_dialog.exec_() != QDialog.Accepted:
             print("No layer selected!")
-            iface.messageBar().pushMessage("Error", "No layer selected!", level=Qgis.Critical)
+            iface.messageBar().pushMessage("Error", "No layer selected!", level=Qgis.Info)
             return  # user cancelled selection
 
         selected_layer, layer_name = layer_dialog.get_selected_layer()
@@ -229,17 +230,40 @@ class GBIFServices:
             layer_id = feature.id()
             geometry = feature.geometry()
 
+
+            # Get the bounding box and count the total records to be fetched
+            extent = geometry.boundingBox()
+            min_x, min_y = extent.xMinimum(), extent.yMinimum()
+            max_x, max_y = extent.xMaximum(), extent.yMaximum()
+            
+            count_url = (
+                'https://api.gbif.org/v1/occurrence/search?'
+                f'geometry=POLYGON(({min_x}%20{min_y},{max_x}%20{min_y},{max_x}%20{max_y},{min_x}%20{max_y},{min_x}%20{min_y}))'
+                '&limit=0'
+            )
+            count_data = fetch_gbif_data(count_url)
+            total_estimate = min(count_data.get('count', 0), 100000)
+
+            # Initialize progress dialog
+            progress = create_progress_dialog(total_estimate)
+
             if geometry.isMultipart():
                 for polygon in geometry.asMultiPolygon():
                     geom = QgsGeometry.fromPolygonXY(polygon)
-                    result_layer, total_records = create_gbif_layer(geom, layer_id)
+                    result_layer, total_records = create_gbif_layer(geom, layer_id, progress)
                     if total_records > 0:
-                        clipping(result_layer, selected_layer, layer_id, pyqgis_group)
+                        clipping_result = clipping(result_layer, selected_layer, layer_id, pyqgis_group)
             else:
-                result_layer, total_records = create_gbif_layer(geometry, layer_id)
+                result_layer, total_records = create_gbif_layer(geometry, layer_id, progress)
+            
                 if total_records > 0:
-                    clipping(result_layer, selected_layer, layer_id, pyqgis_group)
-        
-        print("GBIF Query Complete")
-        QgsMessageLog.logMessage("GBIF Query Complete", "GBIF-Services", level=Qgis.Info)
+                    clipping_result = clipping(result_layer, selected_layer, layer_id, pyqgis_group)
+
+        if not progress.wasCanceled() and clipping_result is not None:
+            print("GBIF Query Complete")
+            QgsMessageLog.logMessage("GBIF Query Complete", "GBIF-Services", level=Qgis.Info)
+
+        else:
+            print("GBIF Query Cancelled")
+            QgsMessageLog.logMessage("GBIF Query Cancelled", "GBIF-Services", level=Qgis.Info)
 
