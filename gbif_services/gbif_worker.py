@@ -14,7 +14,8 @@ from qgis.core import (
 from qgis.PyQt.QtCore import QVariant, QCoreApplication, Qt
 from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QLabel, QDialogButtonBox, QFormLayout, QProgressDialog
 from qgis.gui import QgsMapLayerComboBox
-from qgis.core import QgsMapLayerProxyModel, Qgis, QgsMessageLog
+from qgis.core import QgsMapLayerProxyModel, Qgis, QgsMessageLog, QgsCoordinateTransform, QgsCoordinateReferenceSystem
+from PyQt5.QtCore import Qt
 from qgis.utils import iface
 
 # ---------- Group Management ----------
@@ -29,6 +30,12 @@ def create_unique_gbif_group():
         group_name = 'GBIF Occurrences-' + str(counter)
 
     return treeRoot.insertGroup(0, group_name)
+
+# # ------------ Transform Manager ----------
+# def transform_geometry_to_epsg4326(geometry, source_crs):
+#     target_crs = QgsCoordinateReferenceSystem('EPSG:4326')
+#     transform = QgsCoordinateTransform(source_crs, target_crs, QgsProject.instance())
+#     return geometry.transform(transform)
 
 
 # --------- Create Fetching Progress Dialog ----------
@@ -54,7 +61,7 @@ def fetch_gbif_data(url):
 
 
 # ---------- Create In-Memory Layer ----------
-def create_gbif_layer(polygon, layer_id, progress):
+def create_gbif_layer(polygon, layer_id, progress, total_estimate):
     result_layer = QgsVectorLayer('Point?crs=EPSG:4326', f'GBIF Occurrences-{layer_id}', 'memory')
     provider = result_layer.dataProvider()
 
@@ -73,19 +80,19 @@ def create_gbif_layer(polygon, layer_id, progress):
     min_x, min_y = extent.xMinimum(), extent.yMinimum()
     max_x, max_y = extent.xMaximum(), extent.yMaximum()
 
-    # First get the total count
-    count_url = (
-        'https://api.gbif.org/v1/occurrence/search?'
-        f'geometry=POLYGON(({min_x}%20{min_y},{max_x}%20{min_y},{max_x}%20{max_y},{min_x}%20{max_y},{min_x}%20{min_y}))'
-        '&limit=0'
-    )
-    count_data = fetch_gbif_data(count_url)
-    total_estimate = min(count_data.get('count', 0), 100000)
-    if total_estimate == 0:
-        return result_layer, 0
+    # # First get the total count
+    # count_url = (
+    #     'https://api.gbif.org/v1/occurrence/search?'
+    #     f'geometry=POLYGON(({min_x}%20{min_y},{max_x}%20{min_y},{max_x}%20{max_y},{min_x}%20{max_y},{min_x}%20{min_y}))'
+    #     '&limit=0'
+    # )
+    # count_data = fetch_gbif_data(count_url)
+    # total_estimate = min(count_data.get('count', 0), 100000)
+    # if total_estimate == 0:
+    #     return result_layer, 0
 
-    progress.setMaximum(total_estimate)
-    progress.setValue(0)
+    # progress.setMaximum(total_estimate)
+    # progress.setValue(0)
 
     offset = 0
     added_records = 0
@@ -94,7 +101,7 @@ def create_gbif_layer(polygon, layer_id, progress):
         url = (
             'https://api.gbif.org/v1/occurrence/search?'
             f'geometry=POLYGON(({min_x}%20{min_y},{max_x}%20{min_y},{max_x}%20{max_y},{min_x}%20{max_y},{min_x}%20{min_y}))'
-            f'&limit=300&offset={offset}'
+            f'&limit=100&offset={offset}'
         )
         data = fetch_gbif_data(url)
 
@@ -124,12 +131,12 @@ def create_gbif_layer(polygon, layer_id, progress):
                     return None, 0
 
                 progress.setValue(added_records)
-                progress.setLabelText(f"Fetching GBIF Points... {added_records} / {total_estimate}")
+                progress.setLabelText(f"Fetching GBIF Points for feature {layer_id}... {added_records} / {total_estimate}")
                 QCoreApplication.processEvents()
 
-        if len(data['results']) < 300:
+        if len(data['results']) < 100:
             break
-        offset += 300
+        offset += 100
 
     return result_layer, added_records
 
@@ -151,9 +158,7 @@ def clipping(input_layer, overlay_layer, layer_id, pyqgis_group):
 
     # count the number of results
     feature_count = len([f for f in layer_clip.getFeatures()])
-    print(f"{feature_count} GBIF occurrences within polygon layer {layer_id} have been added to the map.")
-    iface.messageBar().pushMessage("Results added", f"{feature_count} GBIF occurrences within polygon layer {layer_id} have been added to the map.", level=Qgis.Info)
-
+    QgsMessageLog.logMessage(f"Clipping {feature_count} of the {total_features} fetched records to feature {layer_id}", "GBIF-Services", level=Qgis.Info)
 
     # Update the clipping progress bar
     progress.setMaximum(total_features)
@@ -163,12 +168,18 @@ def clipping(input_layer, overlay_layer, layer_id, pyqgis_group):
     for feature in layer_clip.getFeatures():
         feature_idx += 1
         progress.setValue(feature_idx)
-        progress.setLabelText(f"Clipping features... {feature_idx} / {total_features}")
+        progress.setLabelText(f"Clipping features... {feature_idx} / {feature_count}")
         QCoreApplication.processEvents()
 
         if progress.wasCanceled():
-            print("Script cancelled during clipping.")
+            # print("Script cancelled during clipping.")
             return None
+        
+    print(f"{feature_count} GBIF occurrences within polygon feature {layer_id} have been added to the map.")
+    iface.messageBar().pushMessage("Results added", f"{feature_count} GBIF occurrences within polygon feature {layer_id} have been added to the map.", level=Qgis.Info)
+    QgsMessageLog.logMessage(f"{feature_count} GBIF occurrences within polygon feature {layer_id} have been added to the map", "GBIF-Services", level=Qgis.Info)
+        
+    pyqgis_group.addLayer(layer_clip_result)
 
     return layer_clip_result
 
