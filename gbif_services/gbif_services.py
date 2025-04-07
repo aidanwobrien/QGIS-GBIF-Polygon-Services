@@ -282,6 +282,8 @@ class GBIFServices:
             QgsMessageLog.logMessage("GBIF Query Complete", "GBIF-Services", level=Qgis.Info)
 
         else:
+            root = QgsProject.instance().layerTreeRoot()
+            root.removeChildNode(pyqgis_group)
             print("GBIF Query Cancelled")
             QgsMessageLog.logMessage("GBIF Query Cancelled", "GBIF-Services", level=Qgis.Info)
 
