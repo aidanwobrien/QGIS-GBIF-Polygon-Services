@@ -15,6 +15,7 @@ from qgis.PyQt.QtCore import QVariant, QCoreApplication, Qt
 from qgis.PyQt.QtWidgets import QDialog, QVBoxLayout, QLabel, QDialogButtonBox, QFormLayout, QProgressDialog
 from qgis.gui import QgsMapLayerComboBox
 from qgis.core import QgsMapLayerProxyModel, Qgis, QgsMessageLog
+from qgis.utils import iface
 
 # ---------- Group Management ----------
 def create_unique_gbif_group():
@@ -151,6 +152,8 @@ def clipping(input_layer, overlay_layer, layer_id, pyqgis_group):
     # count the number of results
     feature_count = len([f for f in layer_clip.getFeatures()])
     print(f"{feature_count} GBIF occurrences within polygon layer {layer_id} have been added to the map.")
+    iface.messageBar().pushMessage("Results added", f"{feature_count} GBIF occurrences within polygon layer {layer_id} have been added to the map.", level=Qgis.Info)
+
 
     # Update the clipping progress bar
     progress.setMaximum(total_features)
