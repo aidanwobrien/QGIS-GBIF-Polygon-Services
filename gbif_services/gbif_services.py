@@ -74,7 +74,7 @@ class GBIFServices:
 
         # Declare instance attributes
         self.actions = []
-        self.menu = self.tr(u'&GBIF Polygon Services')
+        self.menu = self.tr(u'&GBIF Services')
 
         # Check if plugin was started the first time in current QGIS session
         # Must be set in initGui() to survive plugin reloads
@@ -176,7 +176,7 @@ class GBIFServices:
         icon_path = ':/plugins/gbif_services/icon.png'
         self.add_action(
             icon_path,
-            text=self.tr(u'GBIF Polygon Services'),
+            text=self.tr(u'GBIF Services'),
             callback=self.run,
             parent=self.iface.mainWindow())
 
@@ -188,7 +188,7 @@ class GBIFServices:
         """Removes the plugin menu item and icon from QGIS GUI."""
         for action in self.actions:
             self.iface.removePluginMenu(
-                self.tr(u'&GBIF Polygon Services'),
+                self.tr(u'&GBIF Services'),
                 action)
             self.iface.removeToolBarIcon(action)
 
@@ -209,8 +209,8 @@ class GBIFServices:
         warn_dialog = WarningDialog(warn_str)
 
         if warn_dialog.exec_() != QDialog.Accepted:
-            print("User cancelled GBIF polygon services script")
-            QgsMessageLog.logMessage("User cancelled GBIF polygon services script", "GBIF-Services", level=Qgis.Info)
+            print("User cancelled GBIF services script")
+            QgsMessageLog.logMessage("User cancelled GBIF Services script", "GBIF-Services", level=Qgis.Info)
             return
 
         # Now prompt user to select a polygon layer
@@ -255,11 +255,29 @@ class GBIFServices:
                         clipping_result = clipping(result_layer, selected_layer, layer_id, pyqgis_group)
             else:
                 result_layer, total_records = create_gbif_layer(geometry, layer_id, progress)
+
+                # if result_layer is None:
+                #     print("Script cancelled during GBIF layer creation")
+                #     QgsMessageLog.logMessage("Script cancelled during GBIF layer creation", "GBIF-Services", level=Qgis.Info)
+                #     root = QgsProject.instance().layerTreeRoot()
+                #     root.removeChildNode(pyqgis_group)
+                #     break
             
                 if total_records > 0:
                     clipping_result = clipping(result_layer, selected_layer, layer_id, pyqgis_group)
 
+                # if clipping_result is None:
+                #     print("Script cancelled during clipping.")
+                #     QgsMessageLog.logMessage("Script cancelled during clipping", "GBIF-Services", level=Qgis.Info)
+                #     root = QgsProject.instance().layerTreeRoot()
+                #     root.removeChildNode(pyqgis_group)
+                #     break
+                # else:
+                #     # Add the clipped layer to the group only if clipping is successful
+                #     pyqgis_group.addLayer(clipping_result)
+
         if not progress.wasCanceled() and clipping_result is not None:
+            pyqgis_group.addLayer(clipping_result)
             print("GBIF Query Complete")
             QgsMessageLog.logMessage("GBIF Query Complete", "GBIF-Services", level=Qgis.Info)
 
