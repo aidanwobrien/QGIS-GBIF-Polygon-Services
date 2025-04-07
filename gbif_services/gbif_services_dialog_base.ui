@@ -10,7 +10,7 @@
    </rect>
   </property>
   <property name="windowTitle" >
-   <string>GBIF Services</string>
+   <string>GBIF Polygon Services</string>
   </property>
   <widget class="QDialogButtonBox" name="button_box" >
    <property name="geometry" >

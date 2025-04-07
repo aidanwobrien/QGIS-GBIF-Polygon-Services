@@ -3,14 +3,14 @@
 # This file should be included when you package your plugin.# Mandatory items:
 
 [general]
-name=GBIF Services
+name=GBIF Polygon Services
 qgisMinimumVersion=3.0
-description=Use the GBIF API to get all species occurence point records within a polygon layer
+description=Use the GBIF API to get all species occurence point records within a specified polygon layer
 version=0.1
 author=Aidan O'Brien
 email=aidan.w.obrien@gmail.com
 
-about=Using the GBIF API, this plugins allows the user to query all the species occurrence records within a particular vector layer
+about=Using the GBIF API, this plugins allows the user to query all the species occurrence records within a particular polygon layer
 
 tracker=https://github.com/aidanwobrien/QGIS-GBIF-Services/issues
 repository=https://github.com/aidanwobrien/QGIS-GBIF-Services

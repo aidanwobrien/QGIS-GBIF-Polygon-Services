@@ -74,7 +74,7 @@ class GBIFServices:
 
         # Declare instance attributes
         self.actions = []
-        self.menu = self.tr(u'&GBIF Services')
+        self.menu = self.tr(u'&GBIF Polygon Services')
 
         # Check if plugin was started the first time in current QGIS session
         # Must be set in initGui() to survive plugin reloads
@@ -176,7 +176,7 @@ class GBIFServices:
         icon_path = ':/plugins/gbif_services/icon.png'
         self.add_action(
             icon_path,
-            text=self.tr(u'GBIF Services'),
+            text=self.tr(u'GBIF Polygon Services'),
             callback=self.run,
             parent=self.iface.mainWindow())
 
@@ -188,7 +188,7 @@ class GBIFServices:
         """Removes the plugin menu item and icon from QGIS GUI."""
         for action in self.actions:
             self.iface.removePluginMenu(
-                self.tr(u'&GBIF Services'),
+                self.tr(u'&GBIF Polygon Services'),
                 action)
             self.iface.removeToolBarIcon(action)
 
@@ -209,8 +209,8 @@ class GBIFServices:
         warn_dialog = WarningDialog(warn_str)
 
         if warn_dialog.exec_() != QDialog.Accepted:
-            print("User cancelled GBIF services script")
-            QgsMessageLog.logMessage("User cancelled GBIF Services script", "GBIF-Services", level=Qgis.Info)
+            print("User cancelled GBIF polygon services script")
+            QgsMessageLog.logMessage("User cancelled GBIF polygon services script", "GBIF-Services", level=Qgis.Info)
             return
 
         # Now prompt user to select a polygon layer
