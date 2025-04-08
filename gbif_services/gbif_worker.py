@@ -1,5 +1,6 @@
 import requests
 import processing
+from urllib import request
 
 from qgis.core import (
     QgsProject,
@@ -31,12 +32,14 @@ def create_unique_gbif_group():
 
     return treeRoot.insertGroup(0, group_name)
 
-# # ------------ Transform Manager ----------
-# def transform_geometry_to_epsg4326(geometry, source_crs):
-#     target_crs = QgsCoordinateReferenceSystem('EPSG:4326')
-#     transform = QgsCoordinateTransform(source_crs, target_crs, QgsProject.instance())
-#     return geometry.transform(transform)
+# ---------- Check Network Connection --------------
 
+def internet_on():
+    try:
+        request.urlopen('https://api.gbif.org/', timeout=1)
+        return True
+    except request.URLError as err: 
+        return False
 
 # --------- Create Fetching Progress Dialog ----------
 def create_progress_dialog(total_estimate, task_name="Fetching GBIF Points..."):

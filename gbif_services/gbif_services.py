@@ -37,6 +37,7 @@ import os.path
 from .gbif_worker import (
     create_unique_gbif_group,
     create_progress_dialog,
+    internet_on,
     # create_clipping_progress_dialog,
     fetch_gbif_data,
     create_gbif_layer,
@@ -212,81 +213,89 @@ class GBIFServices:
             print("User cancelled GBIF services script")
             QgsMessageLog.logMessage("User cancelled GBIF Services script", "GBIF-Services", level=Qgis.Info)
             return
+        
+        if internet_on():
+            print("API Connection Successful")
+            # Now prompt user to select a polygon layer
+            layer_dialog = LayerDialog()
+            if layer_dialog.exec_() != QDialog.Accepted:
+                print("No layer selected!")
+                iface.messageBar().pushMessage("Error", "No layer selected!", level=Qgis.Info)
+                QgsMessageLog.logMessage("No layer selected!", "GBIF-Services", level=Qgis.Info)
+                return  # user cancelled selection
 
-        # Now prompt user to select a polygon layer
-        layer_dialog = LayerDialog()
-        if layer_dialog.exec_() != QDialog.Accepted:
-            print("No layer selected!")
-            iface.messageBar().pushMessage("Error", "No layer selected!", level=Qgis.Info)
-            QgsMessageLog.logMessage("No layer selected!", "GBIF-Services", level=Qgis.Info)
-            return  # user cancelled selection
+            selected_layer, layer_name = layer_dialog.get_selected_layer()
 
-        selected_layer, layer_name = layer_dialog.get_selected_layer()
+            if selected_layer:
+                print(f"Selected Layer: {layer_name}")
+                QgsMessageLog.logMessage(f"Selected Layer: {layer_name}", "GBIF-Services", level=Qgis.Info)
+                    
+            if not selected_layer:
+                return
 
-        if selected_layer:
-            print(f"Selected Layer: {layer_name}")
-            QgsMessageLog.logMessage(f"Selected Layer: {layer_name}", "GBIF-Services", level=Qgis.Info)
+            pyqgis_group = create_unique_gbif_group()
+
+            for feature in selected_layer.getFeatures():
+                layer_id = feature.id()
+
+                geometry = feature.geometry()
+                source_crs = selected_layer.crs()
+                geometry = QgsGeometry(geometry)
+
+                if source_crs.authid() != 'EPSG:4326':
+                    print("Transforming Layer")
+                    QgsMessageLog.logMessage("Transforming layer", "GBIF-Services", level=Qgis.Info)
+                    geometry.transform(QgsCoordinateTransform(source_crs, QgsCoordinateReferenceSystem('EPSG:4326'), QgsProject.instance()))
+
+                # Get the bounding box and count the total records to be fetched
+                extent = geometry.boundingBox()
+                min_x, min_y = extent.xMinimum(), extent.yMinimum()
+                max_x, max_y = extent.xMaximum(), extent.yMaximum()
                 
-        if not selected_layer:
-            return
+                count_url = (
+                    'https://api.gbif.org/v1/occurrence/search?'
+                    f'geometry=POLYGON(({min_x}%20{min_y},{max_x}%20{min_y},{max_x}%20{max_y},{min_x}%20{max_y},{min_x}%20{min_y}))'
+                    '&limit=0'
+                )
+                count_data = fetch_gbif_data(count_url)
+                total_estimate = min(count_data.get('count', 0), 100000)
+                QgsMessageLog.logMessage(f"Fetching {total_estimate} for feature {layer_id}", "GBIF-Services", level=Qgis.Info)
 
-        pyqgis_group = create_unique_gbif_group()
+                # Initialize progress dialog
+                progress = create_progress_dialog(total_estimate)
 
-        for feature in selected_layer.getFeatures():
-            layer_id = feature.id()
-
-            geometry = feature.geometry()
-            source_crs = selected_layer.crs()
-            geometry = QgsGeometry(geometry)
-
-            if source_crs.authid() != 'EPSG:4326':
-                print("Transforming Layer")
-                QgsMessageLog.logMessage("Transforming layer", "GBIF-Services", level=Qgis.Info)
-                geometry.transform(QgsCoordinateTransform(source_crs, QgsCoordinateReferenceSystem('EPSG:4326'), QgsProject.instance()))
-
-            # Get the bounding box and count the total records to be fetched
-            extent = geometry.boundingBox()
-            min_x, min_y = extent.xMinimum(), extent.yMinimum()
-            max_x, max_y = extent.xMaximum(), extent.yMaximum()
-            
-            count_url = (
-                'https://api.gbif.org/v1/occurrence/search?'
-                f'geometry=POLYGON(({min_x}%20{min_y},{max_x}%20{min_y},{max_x}%20{max_y},{min_x}%20{max_y},{min_x}%20{min_y}))'
-                '&limit=0'
-            )
-            count_data = fetch_gbif_data(count_url)
-            total_estimate = min(count_data.get('count', 0), 100000)
-            QgsMessageLog.logMessage(f"Fetching {total_estimate} for feature {layer_id}", "GBIF-Services", level=Qgis.Info)
-
-            # Initialize progress dialog
-            progress = create_progress_dialog(total_estimate)
-
-            if geometry.isMultipart():
-                for polygon in geometry.asMultiPolygon():
-                    geom = QgsGeometry.fromPolygonXY(polygon)
-                    result_layer, total_records = create_gbif_layer(geom, layer_id, progress, total_estimate)
+                if geometry.isMultipart():
+                    for polygon in geometry.asMultiPolygon():
+                        geom = QgsGeometry.fromPolygonXY(polygon)
+                        result_layer, total_records = create_gbif_layer(geom, layer_id, progress, total_estimate)
+                        if total_records > 0:
+                            clipping_result = clipping(result_layer, selected_layer, layer_id, pyqgis_group)
+                else:
+                    result_layer, total_records = create_gbif_layer(geometry, layer_id, progress, total_estimate)
                     if total_records > 0:
                         clipping_result = clipping(result_layer, selected_layer, layer_id, pyqgis_group)
-            else:
-                result_layer, total_records = create_gbif_layer(geometry, layer_id, progress, total_estimate)
-                if total_records > 0:
-                    clipping_result = clipping(result_layer, selected_layer, layer_id, pyqgis_group)
 
-            if result_layer is None:
-                print("Script cancelled during GBIF layer creation")
-                QgsMessageLog.logMessage("Script cancelled during GBIF layer creation", "GBIF-Services", level=Qgis.Info)
-                root = QgsProject.instance().layerTreeRoot()
-                root.removeChildNode(pyqgis_group)
-                break
+                if result_layer is None:
+                    print("Script cancelled during GBIF layer creation")
+                    QgsMessageLog.logMessage("Script cancelled during GBIF layer creation", "GBIF-Services", level=Qgis.Info)
+                    root = QgsProject.instance().layerTreeRoot()
+                    root.removeChildNode(pyqgis_group)
+                    break
 
-            if clipping_result is None:
-                print("Script cancelled during clipping")
-                QgsMessageLog.logMessage("Script cancelled during clipping", "GBIF-Services", level=Qgis.Info)
-                root = QgsProject.instance().layerTreeRoot()
-                root.removeChildNode(pyqgis_group)
-                break
+                if clipping_result is None:
+                    print("Script cancelled during clipping")
+                    QgsMessageLog.logMessage("Script cancelled during clipping", "GBIF-Services", level=Qgis.Info)
+                    root = QgsProject.instance().layerTreeRoot()
+                    root.removeChildNode(pyqgis_group)
+                    break
 
-        if not progress.wasCanceled() and clipping_result is not None:
-            # pyqgis_group.addLayer(clipping_result)
-            print("GBIF Query for Complete")
-            QgsMessageLog.logMessage("GBIF Query Complete", "GBIF-Services", level=Qgis.Info)
+            if not progress.wasCanceled() and clipping_result is not None:
+                # pyqgis_group.addLayer(clipping_result)
+                print("GBIF Query for Complete")
+                QgsMessageLog.logMessage("GBIF Query Complete", "GBIF-Services", level=Qgis.Info)
+        else:
+            # treeRoot.removeChildNode(pyqgis_group)
+            iface.messageBar().pushMessage("Error", "Could not connect to the network", level=Qgis.Critical)
+            QgsMessageLog.logMessage("Could not connect to the network. Check your internet connection", "GBIF-Services", level=Qgis.Info)
+            print("A connection to the internet could not be established. \n" \
+            "Please check your network connection and try again")
