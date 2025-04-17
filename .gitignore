@@ -173,4 +173,6 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# .DS_Store
+/gbif_services/DS_Store
+
+/gbif_services/gbif_env/
