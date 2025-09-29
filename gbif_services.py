@@ -42,6 +42,8 @@ from .gbif_worker import (
     fetch_gbif_data,
     create_gbif_layer,
     clipping,
+    add_metadata_to_project,
+    build_gbif_year_param,
     WarningDialog,
     LayerDialog
 )
@@ -218,6 +220,7 @@ class GBIFServices:
             print("API Connection Successful")
             # Now prompt user to select a polygon layer
             layer_dialog = LayerDialog()
+
             if layer_dialog.exec_() != QDialog.Accepted:
                 print("No layer selected!")
                 iface.messageBar().pushMessage("Error", "No layer selected!", level=Qgis.Info)
@@ -231,9 +234,20 @@ class GBIFServices:
                 QgsMessageLog.logMessage(f"Selected Layer: {layer_name}", "GBIF-Services", level=Qgis.Info)
                     
             if not selected_layer:
+                print("No layer selected!")
+                iface.messageBar().pushMessage("Error", "No layer selected!", level=Qgis.Warning)
+                QgsMessageLog.logMessage("No layer selected!", "GBIF-Services", level=Qgis.Warning)
                 return
+                        
 
             pyqgis_group = create_unique_gbif_group()
+
+            species_name = layer_dialog.get_species()
+            start_year, end_year = layer_dialog.get_date_range()
+
+            year_param = build_gbif_year_param(start_year, end_year)
+
+            add_metadata_to_project(species_name, start_year, end_year, layer_name, pyqgis_group)
 
             for feature in selected_layer.getFeatures():
                 layer_id = feature.id()
@@ -256,6 +270,8 @@ class GBIFServices:
                     'https://api.gbif.org/v1/occurrence/search?'
                     f'geometry=POLYGON(({min_x}%20{min_y},{max_x}%20{min_y},{max_x}%20{max_y},{min_x}%20{max_y},{min_x}%20{min_y}))'
                     '&limit=0'
+                    f'&scientificName={species_name}'
+                    f'{year_param}'
                 )
                 count_data = fetch_gbif_data(count_url)
                 total_estimate = min(count_data.get('count', 0), 100000)
@@ -267,11 +283,11 @@ class GBIFServices:
                 if geometry.isMultipart():
                     for polygon in geometry.asMultiPolygon():
                         geom = QgsGeometry.fromPolygonXY(polygon)
-                        result_layer, total_records = create_gbif_layer(geom, layer_id, progress, total_estimate)
+                        result_layer, total_records = create_gbif_layer(geom, layer_id, species_name, start_year, end_year, progress)
                         if total_records > 0:
                             clipping_result = clipping(result_layer, selected_layer, layer_id, pyqgis_group)
                 else:
-                    result_layer, total_records = create_gbif_layer(geometry, layer_id, progress, total_estimate)
+                    result_layer, total_records = create_gbif_layer(geometry, layer_id, species_name, start_year, end_year, progress)
                     if total_records > 0:
                         clipping_result = clipping(result_layer, selected_layer, layer_id, pyqgis_group)
 
