@@ -250,6 +250,7 @@ class GBIFServices:
             add_metadata_to_project(species_name, start_year, end_year, layer_name, pyqgis_group)
 
             for feature in selected_layer.getFeatures():
+                clipping_result = None
                 layer_id = feature.id()
 
                 geometry = feature.geometry()
